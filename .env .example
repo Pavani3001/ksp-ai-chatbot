@@ -1,0 +1,20 @@
+# ── Data layer ───────────────────────────────────────────────────────────────
+# 'mock'     : run over local JSON seed (default; zero external deps)
+# 'catalyst' : run against Catalyst Data Store via zcatalyst-sdk-node
+DATA_PROVIDER=mock
+
+# ── LLM layer ────────────────────────────────────────────────────────────────
+# 'template' : deterministic rule-based NL->ZCQL (default; offline)
+# 'quickml'  : Catalyst QuickML LLM Serving
+LLM_PROVIDER=template
+QUICKML_ENDPOINT=
+QUICKML_API_KEY=
+
+# ── Local server ─────────────────────────────────────────────────────────────
+PORT=3001
+# Absolute path to generated seed data (defaults to ../../../data/seed)
+# SEED_DIR=/absolute/path/to/data/seed
+
+# ── Frontend (client/.env) ───────────────────────────────────────────────────
+# VITE_API_BASE=/server/api      # when deployed behind Catalyst API Gateway
+# VITE_API_TARGET=http://localhost:3001   # local dev proxy target

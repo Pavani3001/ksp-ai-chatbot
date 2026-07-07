@@ -1,0 +1,18 @@
+# Node & builds
+node_modules/
+dist/
+*.log
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+.catalyst/
+catalyst-cli-token*
+
+# OS
+.DS_Store
+
+# Generated seed data is reproducible via `node data/generate_seed.js`.
+# Keep it out of git to keep the repo lean; the generator is the source of truth.
+data/seed/

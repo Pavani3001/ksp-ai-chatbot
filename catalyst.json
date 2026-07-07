@@ -1,0 +1,10 @@
+{
+  "$schema": "https://catalyst.zoho.com/config/catalyst-config.json",
+  "project_name": "ksp-crime-intelligence",
+  "functions": {
+    "location": "functions"
+  },
+  "client": {
+    "source": "client/dist"
+  }
+}

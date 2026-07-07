@@ -1,0 +1,10 @@
+{
+  "deployment": {
+    "name": "api",
+    "stack": "node18",
+    "type": "advancedio",
+    "memory": 512,
+    "timeout": 30,
+    "entrypoint": "index.js"
+  }
+}
