@@ -18,12 +18,12 @@
 const express = require('express');
 const cors = require('cors');
 
-const { executeQuery } = require('./lib/dataClient');
-const guard = require('./lib/zcqlGuard');
-const { nlToZcql } = require('./lib/nl2zcql');
-const analytics = require('./lib/analytics');
-const { accusedGraphQuery, buildNetwork } = require('./lib/network');
-const { SCHEMA, GENDER } = require('./lib/schema');
+const { executeQuery } = require('./api/lib/dataClient');
+const guard = require('./api/lib/zcqlGuard');
+const { nlToZcql } = require('./api/lib/mockZcql ');
+const analytics = require('./api/lib/analytics');
+const { accusedGraphQuery, buildNetwork } = require('./api/lib/network');
+const { SCHEMA, GENDER } = require('./api/lib/schema');
 
 const app = express();
 app.use(cors());
