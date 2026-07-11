@@ -1,12 +1,16 @@
 /**
- * HTTP route test — drives the Express app in-memory (no socket) via inject().
- * Run: node functions/api/test/http.js
+ * Backend smoke test — exercises the ZCQL engine, guardrail, NL->ZCQL, and
+ * network builder directly (no HTTP). Run: node functions/api/test/smoke.js
+ * Exits non-zero on failure.
  */
 process.env.SEED_DIR = require('path').join(__dirname, '..', '..', '..', 'data', 'seed');
 
 const assert = require('assert');
-const { inject } = require('./inject');
-const app = require('../index');
+const { executeQuery } = require('../lib/dataClient');
+const guard = require('../lib/zcqlGuard');
+const { templateResolve } = require('../lib/nl2zcql');
+const { accusedGraphQuery, buildNetwork } = require('../lib/network');
+const analytics = require('../lib/analytics');
 
 let passed = 0;
 async function t(name, fn) {
@@ -15,67 +19,65 @@ async function t(name, fn) {
 }
 
 (async () => {
-  await t('GET /health', async () => {
-    const r = await inject(app, { url: '/health' });
-    assert.equal(r.status, 200);
-    assert.equal(r.body.status, 'ok');
+  console.log('ZCQL engine:');
+  await t('COUNT(*) over CaseMaster', async () => {
+    const { content } = await executeQuery('SELECT COUNT(*) AS c FROM CaseMaster');
+    assert(content[0].c === 1200, `expected 1200 got ${content[0].c}`);
+  });
+  await t('JOIN + GROUP BY district', async () => {
+    const { content } = await executeQuery('SELECT d.DistrictName AS name, COUNT(*) AS count FROM CaseMaster cm JOIN Unit u ON cm.PoliceStationID = u.UnitID JOIN District d ON u.DistrictID = d.DistrictID GROUP BY d.DistrictName ORDER BY count DESC LIMIT 3');
+    assert(content.length === 3, `expected 3 rows got ${content.length}`);
+    assert(content[0].count >= content[1].count, 'not sorted desc');
+  });
+  await t('WHERE + LIKE year filter', async () => {
+    const { content } = await executeQuery("SELECT COUNT(*) AS c FROM CaseMaster cm WHERE cm.CrimeRegisteredDate LIKE '2025%'");
+    assert(content[0].c > 0, 'no 2025 cases');
   });
 
-  await t('POST /chat count returns answer + evidence', async () => {
-    const r = await inject(app, { method: 'POST', url: '/chat', body: { question: 'how many theft cases in Mysuru in 2025' } });
-    assert.equal(r.status, 200);
-    assert.equal(r.body.intent, 'count');
-    assert(/matching cases/.test(r.body.answer), r.body.answer);
-    assert(r.body.evidence.zcql.includes('SELECT'), 'no evidence zcql');
+  console.log('Guardrail:');
+  await t('rejects DELETE', () => {
+    assert.throws(() => guard.validate('DELETE FROM CaseMaster'));
+  });
+  await t('rejects stacked query', () => {
+    assert.throws(() => guard.validate('SELECT * FROM CaseMaster; DROP TABLE Accused'));
+  });
+  await t('rejects unknown table', () => {
+    assert.throws(() => guard.validate('SELECT * FROM SecretTable'));
+  });
+  await t('injects LIMIT', () => {
+    const q = guard.validate('SELECT CrimeNo FROM CaseMaster');
+    assert(/LIMIT \d+$/.test(q), `no limit: ${q}`);
   });
 
-  await t('POST /chat hotspots', async () => {
-    const r = await inject(app, { method: 'POST', url: '/chat', body: { question: 'where are the crime hotspots' } });
-    assert.equal(r.body.intent, 'hotspots');
-    assert(r.body.rows.length > 0, 'no rows');
+  console.log('NL->ZCQL (template):');
+  await t('count intent', () => {
+    const r = templateResolve('how many theft cases in Mysuru in 2025');
+    assert(r.intent === 'count', r.intent);
+    assert(r.zcql.includes("DistrictName = 'Mysuru'"), r.zcql);
+  });
+  await t('hotspot intent', () => {
+    const r = templateResolve('where are the crime hotspots');
+    assert(r.intent === 'hotspots', r.intent);
+  });
+  await t('repeat offender intent', () => {
+    const r = templateResolve('show me repeat offenders');
+    assert(r.intent === 'repeat_offenders', r.intent);
   });
 
-  await t('POST /chat follow-up uses context', async () => {
-    const r = await inject(app, { method: 'POST', url: '/chat', body: { question: 'what is the status breakdown', context: { district: 'Mysuru' } } });
-    assert.equal(r.body.intent, 'status');
-    assert(r.body.evidence.zcql.includes('Mysuru'), 'context district not applied');
+  console.log('Analytics + Network:');
+  await t('trend transform buckets by month', async () => {
+    const { content } = await executeQuery(guard.validate(analytics.trendQuery()));
+    const out = analytics.trendTransform(content);
+    assert(out.length > 0 && out[0].month.match(/^\d{4}-\d{2}$/), 'bad month buckets');
+  });
+  await t('network builds nodes + edges + gangs', async () => {
+    const { content } = await executeQuery(guard.validate(accusedGraphQuery()));
+    const net = buildNetwork(content, { minCases: 2 });
+    assert(net.nodes.length > 0, 'no nodes');
+    assert(net.topOffenders.length > 0, 'no top offenders');
+    assert(net.topOffenders[0].risk >= net.topOffenders[1].risk, 'not sorted by risk');
+    console.log(`      -> ${net.stats.repeatOffenders} repeat offenders, ${net.gangs.length} gangs, top risk=${net.topOffenders[0].risk}`);
   });
 
-  await t('POST /chat rejects empty', async () => {
-    const r = await inject(app, { method: 'POST', url: '/chat', body: {} });
-    assert.equal(r.status, 400);
-  });
-
-  for (const kind of ['summary', 'trend', 'crimeHead', 'status', 'district', 'incidents', 'ageBand', 'gender', 'occupation', 'religion']) {
-    await t(`GET /analytics/${kind}`, async () => {
-      const r = await inject(app, { url: `/analytics/${kind}` });
-      assert.equal(r.status, 200, `status ${r.status}`);
-      assert(r.body.data, 'no data');
-    });
-  }
-
-  await t('GET /network', async () => {
-    const r = await inject(app, { url: '/network' });
-    assert.equal(r.status, 200);
-    assert(r.body.nodes.length > 0 && r.body.topOffenders.length > 0, 'empty network');
-    console.log(`      -> nodes=${r.body.nodes.length} edges=${r.body.edges.length} gangs=${r.body.gangs.length} topRisk=${r.body.topOffenders[0].risk}`);
-  });
-
-  await t('GET /network?focus=<top offender> narrows graph', async () => {
-    const full = await inject(app, { url: '/network' });
-    const name = full.body.topOffenders[0].name;
-    const r = await inject(app, { url: '/network', query: { focus: name } });
-    assert(r.body.nodes.some((n) => n.id === name), 'focus node missing');
-  });
-
-  await t('GET /case/:crimeNo returns case + accused + victims', async () => {
-    const list = await inject(app, { method: 'POST', url: '/chat', body: { question: 'list recent theft cases' } });
-    const crimeNo = list.body.rows[0].CrimeNo;
-    const r = await inject(app, { url: `/case/${crimeNo}` });
-    assert.equal(r.status, 200, `status ${r.status}`);
-    assert(r.body.case.crimeNo, 'no case');
-    assert(Array.isArray(r.body.accused), 'no accused array');
-  });
-
-  console.log(`\n${passed} HTTP checks passed.`);
+  console.log(`\n${passed} checks passed.`);
 })();

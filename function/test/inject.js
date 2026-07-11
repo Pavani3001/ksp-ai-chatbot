@@ -1,67 +1,68 @@
 /**
- * Contract test: confirms the API response shapes consumed by the React
- * components match exactly what the backend emits. Guards against silent
- * client/server drift without needing a browser or a bound socket.
- * Run: node functions/api/test/contract.js
+ * In-memory HTTP harness: drives the Express app via app.handle() with mock
+ * req/res objects. No socket is bound, so this runs under sandboxes that block
+ * listen(). Mirrors what a real request would exercise: routing, middleware
+ * (json body parse, cors), handlers, and status/JSON responses.
  */
-process.env.SEED_DIR = require('path').join(__dirname, '..', '..', '..', 'data', 'seed');
-const assert = require('assert');
-const { inject } = require('./inject');
-const app = require('../index');
+const { Readable, Duplex } = require('stream');
 
-let passed = 0;
-async function t(name, fn) {
-  try { await fn(); passed++; console.log(`  ✓ ${name}`); }
-  catch (e) { console.error(`  ✗ ${name}\n    ${e.message}`); process.exitCode = 1; }
+// A no-op duplex that satisfies http's expectations for req.socket (it calls
+// socket.destroy() during teardown).
+function fakeSocket() {
+  const s = new Duplex({ read() {}, write(_c, _e, cb) { cb(); } });
+  s.remoteAddress = '127.0.0.1';
+  s.encrypted = false;
+  s.setTimeout = () => {};
+  s.setKeepAlive = () => {};
+  s.setNoDelay = () => {};
+  return s;
 }
-const hasKeys = (obj, keys, ctx) => keys.forEach((k) => assert(k in obj, `${ctx} missing '${k}'`));
 
-(async () => {
-  // Chat.jsx consumes: answer, explanation, evidence.{zcql,rowCount}, rows[], context, intent
-  await t('/chat shape matches Chat.jsx', async () => {
-    const r = await inject(app, { method: 'POST', url: '/chat', body: { question: 'where are the hotspots' } });
-    hasKeys(r.body, ['answer', 'explanation', 'evidence', 'rows', 'context', 'intent'], '/chat');
-    hasKeys(r.body.evidence, ['zcql', 'rowCount'], '/chat.evidence');
-    assert(Array.isArray(r.body.rows), 'rows not array');
-  });
+function inject(app, { method = 'GET', url = '/', body = null, query = null }) {
+  return new Promise((resolve, reject) => {
+    let fullUrl = url;
+    if (query) {
+      const qs = new URLSearchParams(query).toString();
+      fullUrl += (url.includes('?') ? '&' : '?') + qs;
+    }
+    const payload = body != null ? Buffer.from(JSON.stringify(body)) : null;
 
-  // Dashboard.jsx summary KPIs
-  await t('/analytics/summary shape matches Dashboard KPIs', async () => {
-    const r = await inject(app, { url: '/analytics/summary' });
-    hasKeys(r.body.data, ['total', 'heinous', 'arrests', 'chargesheeted'], 'summary');
-  });
+    // Build a minimal IncomingMessage-like readable.
+    const req = new Readable({ read() {} });
+    req.method = method;
+    req.url = fullUrl;
+    req.headers = { host: 'localhost', 'content-type': 'application/json' };
+    if (payload) {
+      req.headers['content-length'] = String(payload.length);
+      req.push(payload);
+    }
+    req.push(null);
+    const sock = fakeSocket();
+    req.connection = sock;
+    req.socket = sock;
 
-  // Dashboard charts expect [{name,count}] or [{month,count}] / [{band,count}]
-  await t('/analytics/trend rows have month+count', async () => {
-    const r = await inject(app, { url: '/analytics/trend' });
-    hasKeys(r.body.data[0], ['month', 'count'], 'trend');
-  });
-  for (const [kind, key] of [['crimeHead', 'name'], ['status', 'name'], ['district', 'name'], ['occupation', 'name'], ['gender', 'name']]) {
-    await t(`/analytics/${kind} rows have ${key}+count`, async () => {
-      const r = await inject(app, { url: `/analytics/${kind}` });
-      hasKeys(r.body.data[0], [key, 'count'], kind);
-    });
-  }
-  await t('/analytics/ageBand rows have band+count', async () => {
-    const r = await inject(app, { url: '/analytics/ageBand' });
-    hasKeys(r.body.data[0], ['band', 'count'], 'ageBand');
-  });
-  await t('/analytics/incidents rows have lat/lng/type', async () => {
-    const r = await inject(app, { url: '/analytics/incidents' });
-    hasKeys(r.body.data[0], ['lat', 'lng', 'type'], 'incidents');
-  });
+    // Minimal ServerResponse-like writable.
+    const chunks = [];
+    const res = {
+      statusCode: 200,
+      _headers: {},
+      setHeader(k, v) { this._headers[k.toLowerCase()] = v; },
+      getHeader(k) { return this._headers[k.toLowerCase()]; },
+      removeHeader(k) { delete this._headers[k.toLowerCase()]; },
+      writeHead(code, headers) { this.statusCode = code; if (headers) Object.assign(this._headers, headers); },
+      write(c) { if (c) chunks.push(Buffer.from(c)); return true; },
+      end(c) {
+        if (c) chunks.push(Buffer.from(c));
+        const text = Buffer.concat(chunks).toString('utf8');
+        let json = null;
+        try { json = text ? JSON.parse(text) : null; } catch { /* non-json */ }
+        resolve({ status: this.statusCode, body: json, text });
+      },
+      on() {}, once() {}, emit() {}, headersSent: false,
+    };
 
-  // NetworkView.jsx expects nodes[{id,caseCount,risk,crimes}], edges[{source,target,weight}],
-  // topOffenders[{name,caseCount,coOffenders,risk,crimes}], gangs[{id,size,members}], stats
-  await t('/network shape matches NetworkView.jsx', async () => {
-    const r = await inject(app, { url: '/network' });
-    hasKeys(r.body, ['nodes', 'edges', 'topOffenders', 'gangs', 'stats'], '/network');
-    hasKeys(r.body.nodes[0], ['id', 'caseCount', 'risk', 'crimes'], 'node');
-    hasKeys(r.body.edges[0], ['source', 'target', 'weight'], 'edge');
-    hasKeys(r.body.topOffenders[0], ['name', 'caseCount', 'coOffenders', 'risk', 'crimes'], 'offender');
-    hasKeys(r.body.gangs[0], ['id', 'size', 'members'], 'gang');
-    hasKeys(r.body.stats, ['totalOffenders', 'repeatOffenders'], 'stats');
+    try { app.handle(req, res); } catch (e) { reject(e); }
   });
+}
 
-  console.log(`\n${passed} contract checks passed.`);
-})();
+module.exports = { inject };
