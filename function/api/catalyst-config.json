@@ -1,7 +1,7 @@
 {
   "deployment": {
     "name": "api",
-    "stack": "node18",
+    "stack": "node20",
     "type": "advancedio",
     "memory": 512,
     "timeout": 30,

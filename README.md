@@ -18,7 +18,7 @@ Ask questions in plain English or Kannada — *"Where are the theft hotspots in 
 | 4 | **Socio-demographic insights** — complainant age bands, gender, occupation distributions | `Analytics` tab |
 | 5 | **Criminal network & repeat-offender analysis** — co-accused graph, gang detection, offender **risk scoring** | `Networks` tab |
 | 6 | **Investigator decision support** — case summary endpoint (`/case/:crimeNo`) returning facts, accused, victims | API |
-| 7 | **Secure querying** — SELECT-only guardrail, table allowlist, forced LIMIT, no stacked queries/comments | `functions/api/lib/zcqlGuard.js` |
+| 7 | **Secure querying** — SELECT-only guardrail, table allowlist, forced LIMIT, no stacked queries/comments | `function/api/lib/zcqlGuard.js` |
 
 See [`docs/PROTOTYPE_BRIEF.md`](docs/PROTOTYPE_BRIEF.md) for the submission brief and how each maps to the challenge's 10 solution areas (including what's roadmap vs. built).
 
@@ -30,7 +30,7 @@ See [`docs/PROTOTYPE_BRIEF.md`](docs/PROTOTYPE_BRIEF.md) for the submission brie
         React SPA  (Catalyst Web Client Hosting)
               │  REST /chat /analytics /network /case
               ▼
-   Catalyst Serverless Function — Node.js  (functions/api)
+   Catalyst Serverless Function — Node.js  (function/api)
    ┌──────────────────────────────────────────────┐
    │  zcqlGuard → nl2zcql → dataClient → analytics  │
    │                          │        └ network/risk│
@@ -42,7 +42,7 @@ See [`docs/PROTOTYPE_BRIEF.md`](docs/PROTOTYPE_BRIEF.md) for the submission brie
 
 The **provider adapters** decouple logic from infrastructure:
 
-- `DATA_PROVIDER=mock` runs a MySQL-compatible ZCQL interpreter over local JSON (`functions/api/lib/mockZcql.js`). `DATA_PROVIDER=catalyst` calls `zcql.executeZCQLQuery` / `executeOLAPQuery`.
+- `DATA_PROVIDER=mock` runs a MySQL-compatible ZCQL interpreter over local JSON (`function/api/lib/mockZcql.js`). `DATA_PROVIDER=catalyst` calls `zcql.executeZCQLQuery` / `executeOLAPQuery`.
 - `LLM_PROVIDER=template` uses a deterministic rule-based NL→ZCQL resolver. `LLM_PROVIDER=quickml` calls Catalyst QuickML LLM Serving.
 
 The **same guarded ZCQL string runs unchanged** against both the mock and Catalyst data stores. Full detail in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md); the data model is in [`docs/SCHEMA.md`](docs/SCHEMA.md).
@@ -58,7 +58,7 @@ Requires Node 18+.
 node data/generate_seed.js
 
 # 2. Backend — Catalyst function runs standalone as an Express server
-cd functions/api
+cd function/api
 npm install
 npm test          # 41 checks: ZCQL engine, guardrail, routes, client contract
 npm start         # http://localhost:3001  (needs local bind permission)
@@ -119,7 +119,7 @@ kspdata/
 │   ├── schema/schema.js            # canonical schema (source of truth)
 │   ├── generate_seed.js            # deterministic synthetic data generator
 │   └── seed/                       # generated JSON (git-ignored, reproducible)
-├── functions/api/                  # Catalyst Advanced I/O function (Node.js)
+├── function/api/                  # Catalyst Advanced I/O function (Node.js)
 │   ├── index.js                    # Express app (routes)
 │   ├── lib/                        # dataClient, mockZcql, zcqlGuard, nl2zcql, analytics, network, schema
 │   └── test/                       # smoke, http (in-process), contract tests

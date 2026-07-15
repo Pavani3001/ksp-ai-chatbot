@@ -1,0 +1,6 @@
+# Exclude node_modules from deployment packages
+node_modules/
+**/node_modules/
+.git/
+.env*
+data/seed/

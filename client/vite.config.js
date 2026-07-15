@@ -7,6 +7,7 @@ import react from '@vitejs/plugin-react';
 // path (API Gateway / function route) works without CORS.
 export default defineConfig({
   plugins: [react()],
+  base: '/app/',
   server: {
     port: 5173,
     proxy: {

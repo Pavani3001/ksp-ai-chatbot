@@ -9,8 +9,12 @@ cd "$(dirname "$0")/.."
 echo "==> Generating seed data (for Data Store import)…"
 node data/generate_seed.js
 
+echo "==> Copying seed data into the function package…"
+mkdir -p function/api/data/seed
+cp data/seed/*.json function/api/data/seed/
+
 echo "==> Installing function deps…"
-(cd functions/api && npm install --production)
+(cd function/api && npm install --production)
 
 echo "==> Building client…"
 (cd client && npm install && npm run build)

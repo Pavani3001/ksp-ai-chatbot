@@ -1,3 +1,4 @@
+
 # Data Model — KSP FIR Schema
 
 Derived from the Karnataka Police FIR ER Diagram. 27 tables. `PK` = primary key, `FK` = foreign key. Source of truth: `data/schema/schema.js`.

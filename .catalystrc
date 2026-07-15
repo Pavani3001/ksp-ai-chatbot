@@ -1,0 +1,29 @@
+{
+  "defaults": {
+    "project": 1
+  },
+  "actives": {
+    "project": 1,
+    "env": 1
+  },
+  "projects": [
+    {
+      "idx": 1,
+      "id": "53287000000019002",
+      "name": "ksp-ai-chatbot",
+      "domain": {
+        "id": "50043750652",
+        "name": "ksp-ai-chatbot-60076392947.development"
+      },
+      "timezone": "Asia/Kolkata",
+      "env": [
+        {
+          "idx": 1,
+          "id": "60076392947",
+          "name": "Development",
+          "type": 3
+        }
+      ]
+    }
+  ]
+}

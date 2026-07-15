@@ -6,7 +6,7 @@
  */
 process.env.SEED_DIR = require('path').join(__dirname, '..', '..', '..', 'data', 'seed');
 const assert = require('assert');
-const { inject } = require('./contract');
+const { inject } = require('./inject');
 const app = require('../index');
 
 let passed = 0;

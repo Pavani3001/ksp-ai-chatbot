@@ -25,7 +25,21 @@ const PROVIDER = process.env.DATA_PROVIDER || 'mock';
 let _mockTables = null;
 function mockTables() {
   if (_mockTables) return _mockTables;
-  const seedDir = process.env.SEED_DIR || path.join(__dirname, '..', '..', '..', 'data', 'seed');
+  const candidateDirs = [
+    process.env.SEED_DIR,
+    path.join(__dirname, '..', 'data', 'seed'),
+    path.join(__dirname, '..', '..', '..', 'data', 'seed'),
+  ].filter(Boolean);
+  let seedDir = null;
+  for (const dir of candidateDirs) {
+    if (fs.existsSync(dir)) {
+      seedDir = dir;
+      break;
+    }
+  }
+  if (!seedDir) {
+    throw new Error('Seed directory not found; set SEED_DIR or include data/seed in the function package');
+  }
   _mockTables = loadMockTables(seedDir, fs, path);
   return _mockTables;
 }

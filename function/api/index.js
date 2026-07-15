@@ -18,12 +18,14 @@
 const express = require('express');
 const cors = require('cors');
 
-const { executeQuery } = require('./api/lib/dataClient');
-const guard = require('./api/lib/zcqlGuard');
-const { nlToZcql } = require('./api/lib/mockZcql ');
-const analytics = require('./api/lib/analytics');
-const { accusedGraphQuery, buildNetwork } = require('./api/lib/network');
-const { SCHEMA, GENDER } = require('./api/lib/schema');
+const { executeQuery } = require('./lib/dataClient');
+const guard = require('./lib/zcqlGuard');
+console.log("guard =", guard);
+console.log("guard.validate =", guard.validate);
+const { nlToZcql } = require('./lib/nl2zcql');
+const analytics = require('./lib/analytics');
+const { accusedGraphQuery, buildNetwork } = require('./lib/network');
+const { SCHEMA, GENDER } = require('./lib/schema');
 
 const app = express();
 app.use(cors());
@@ -35,6 +37,8 @@ async function query(zcql, req) {
   const { content } = await executeQuery(safe, req);
   return { rows: content, executedZcql: safe };
 }
+
+app.get('/', (_req, res) => res.json({ status: 'ok', message: 'KSP Crime Intelligence API', health: '/health' }));
 
 app.get('/health', (_req, res) => res.json({ status: 'ok', provider: process.env.DATA_PROVIDER || 'mock' }));
 
